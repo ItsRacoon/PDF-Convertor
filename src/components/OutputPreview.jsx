@@ -1,129 +1,184 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import './OutputPreview.css'; // Import the new external CSS file
 
-function OutputPreview({ previewUrl, format }) {
+// Define format configurations in a separate object for better maintainability
+const FORMAT_CONFIG = {
+  docx: { 
+    icon: 'bi-file-earmark-word-fill',
+    color: 'primary',
+    name: 'Word Document'
+  },
+  csv: { 
+    icon: 'bi-file-earmark-spreadsheet-fill',
+    color: 'success',
+    name: 'CSV Spreadsheet'
+  },
+  xlsx: { 
+    icon: 'bi-file-earmark-excel-fill',
+    color: 'success',
+    name: 'Excel Spreadsheet'
+  },
+  default: { 
+    icon: 'bi-file-earmark-fill',
+    color: 'secondary',
+    name: 'Document'
+  }
+};
+
+// Scale constants to avoid magic numbers
+const SCALE = {
+  MIN: 0.5,
+  MAX: 2.0,
+  DEFAULT: 1.0,
+  STEP: 0.1
+};
+
+function OutputPreview({ previewUrl, format, customStyles = {} }) {
   const [content, setContent] = useState('');
-  const [scale, setScale] = useState(1.0);
+  const [scale, setScale] = useState(SCALE.DEFAULT);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const contentRef = useRef(null);
   const containerRef = useRef(null);
   
-  // Format-specific styling
-  const getFormatInfo = () => {
-    switch(format?.toLowerCase()) {
-      case 'docx': 
-        return { 
-          icon: 'bi-file-earmark-word-fill',
-          color: 'primary',
-          name: 'Word Document'
-        };
-      case 'csv': 
-        return { 
-          icon: 'bi-file-earmark-spreadsheet-fill',
-          color: 'success',
-          name: 'CSV Spreadsheet'
-        };
-      case 'xlsx': 
-        return { 
-          icon: 'bi-file-earmark-excel-fill',
-          color: 'success',
-          name: 'Excel Spreadsheet'
-        };
-      default: 
-        return { 
-          icon: 'bi-file-earmark-fill',
-          color: 'secondary',
-          name: 'Document'
-        };
-    }
-  };
+  // Use memoization for format info to avoid recalculation on every render
+  const formatInfo = useMemo(() => {
+    const formatKey = format?.toLowerCase();
+    return FORMAT_CONFIG[formatKey] || FORMAT_CONFIG.default;
+  }, [format]);
   
-  const formatInfo = getFormatInfo();
-  
-  useEffect(() => {
-    if (!previewUrl) return;
+  // Fetch content using a callback to avoid recreating on every render
+  const fetchPreview = useCallback(async (url) => {
+    if (!url) return;
     
     setIsLoading(true);
     setError(null);
     
-    const fetchPreview = async () => {
-      try {
-        const response = await fetch(previewUrl);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch preview`);
-        }
-        const html = await response.text();
-        setContent(html);
-        setTimeout(() => {
-          fitWidth();
-          setIsLoading(false);
-        }, 100);
-      } catch (error) {
-        console.error('Error fetching preview:', error);
-        setError(error.message);
-        setIsLoading(false);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch preview (Status: ${response.status})`);
       }
-    };
-    
-    fetchPreview();
-  }, [previewUrl]);
+      
+      const html = await response.text();
+      setContent(html);
+      
+      // Schedule fit width after render
+      setTimeout(() => {
+        fitWidth();
+        setIsLoading(false);
+      }, 100);
+    } catch (error) {
+      console.error('Error fetching preview:', error);
+      setError(error.message || 'Failed to load preview');
+      setIsLoading(false);
+    }
+  }, []);
   
-  const zoomIn = () => setScale(prev => Math.min(prev + 0.1, 2.0));
-  const zoomOut = () => setScale(prev => Math.max(prev - 0.1, 0.5));
-  const resetZoom = () => setScale(1.0);
+  // Effect hook for fetching content
+  useEffect(() => {
+    fetchPreview(previewUrl);
+  }, [previewUrl, fetchPreview]);
   
-  const fitWidth = () => {
+  // Zoom controls with guard clauses
+  const zoomIn = () => {
+    if (scale >= SCALE.MAX) return;
+    setScale(prev => Math.min(prev + SCALE.STEP, SCALE.MAX));
+  };
+  
+  const zoomOut = () => {
+    if (scale <= SCALE.MIN) return;
+    setScale(prev => Math.max(prev - SCALE.STEP, SCALE.MIN));
+  };
+  
+  const resetZoom = () => setScale(SCALE.DEFAULT);
+  
+  // Improved fitWidth with null checks and better scaling logic
+  const fitWidth = useCallback(() => {
     if (!contentRef.current || !containerRef.current) return;
     
     const container = containerRef.current;
     const content = contentRef.current;
     
-    if (content) {
-      const contentWidth = content.scrollWidth - 40;
-      const containerWidth = container.clientWidth;
-      const newScale = containerWidth / contentWidth;
-      setScale(Math.min(Math.max(newScale, 0.5), 1.5));
+    // Ensure content has dimensions before calculating
+    if (content && content.scrollWidth > 0) {
+      const contentWidth = content.scrollWidth;
+      const containerWidth = container.clientWidth - 48; // Account for padding
+      
+      if (containerWidth > 0) {
+        const newScale = containerWidth / contentWidth;
+        setScale(Math.min(Math.max(newScale, SCALE.MIN), SCALE.MAX));
+      }
     }
-  };
+  }, []);
   
-  // Add print functionality
-  const printPreview = () => {
+  // Enhanced print function with error handling
+  const printPreview = useCallback(() => {
     if (!content) return;
     
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Print ${format.toUpperCase()} Preview</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-            table { border-collapse: collapse; width: 100%; }
-            table, th, td { border: 1px solid #ddd; }
-            th, td { padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; }
-            @media print {
-              body { margin: 0; padding: 15px; }
-            }
-          </style>
-        </head>
-        <body>
-          ${content}
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    try {
+      const printWindow = window.open('', '_blank');
+      
+      if (!printWindow) {
+        alert('Please allow pop-ups for printing functionality');
+        return;
+      }
+      
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Print ${format?.toUpperCase() || 'Document'}</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+              table { border-collapse: collapse; width: 100%; max-width: 100%; }
+              table, th, td { border: 1px solid #ddd; }
+              th, td { padding: 8px; text-align: left; }
+              th { background-color: #f2f2f2; }
+              img { max-width: 100%; height: auto; }
+              @media print {
+                body { margin: 0; padding: 15px; }
+                a { text-decoration: none; color: #000; }
+              }
+            </style>
+          </head>
+          <body>
+            ${content}
+          </body>
+        </html>
+      `);
+      
+      printWindow.document.close();
+      
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 300);
+    } catch (error) {
+      console.error('Error printing preview:', error);
+      alert('Failed to open print preview. Please check your browser settings.');
+    }
+  }, [content, format]);
+  
+  // Add window resize listener for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      fitWidth();
+    };
     
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
-  };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [fitWidth]);
+  
+  // Apply custom styles if provided
+  const containerStyle = { ...(customStyles.container || {}) };
   
   return (
-    <div className="output-section">
+    <div className="output-section" style={containerStyle}>
       <div className="output-header">
         <div className="output-title">
-          <i className={`bi ${formatInfo.icon} output-icon`}></i>
+          <i className={`bi ${formatInfo.icon} output-icon text-${formatInfo.color}`}></i>
           <h3>{formatInfo.name} Preview</h3>
         </div>
         <div className="output-actions">
@@ -132,6 +187,7 @@ function OutputPreview({ previewUrl, format }) {
             onClick={printPreview}
             disabled={isLoading || !content}
             title="Print Preview"
+            aria-label="Print Preview"
           >
             <i className="bi bi-printer-fill"></i>
           </button>
@@ -144,11 +200,12 @@ function OutputPreview({ previewUrl, format }) {
             <div className="spinner-border" role="status">
               <span className="visually-hidden">Loading...</span>
             </div>
+            <p className="loading-text">Loading preview...</p>
           </div>
         )}
         
         {error && (
-          <div className="error-message">
+          <div className="error-message" role="alert">
             <i className="bi bi-exclamation-triangle-fill"></i>
             <h5>Error Loading Preview</h5>
             <p>{error}</p>
@@ -159,7 +216,10 @@ function OutputPreview({ previewUrl, format }) {
           <div 
             ref={contentRef}
             className="preview-content"
-            style={{ transform: `scale(${scale})` }}
+            style={{ 
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left'
+            }}
             dangerouslySetInnerHTML={{ __html: content }}
           />
         )}
@@ -168,7 +228,7 @@ function OutputPreview({ previewUrl, format }) {
           <div className="no-preview">
             <i className="bi bi-file-earmark"></i>
             <h5>No Preview Available</h5>
-            <p>The preview could not be generated.</p>
+            <p>The preview could not be generated or is empty.</p>
           </div>
         )}
       </div>
@@ -181,8 +241,9 @@ function OutputPreview({ previewUrl, format }) {
           <button 
             className="control-button"
             onClick={zoomOut} 
-            disabled={scale <= 0.5 || isLoading}
+            disabled={scale <= SCALE.MIN || isLoading}
             title="Zoom Out"
+            aria-label="Zoom Out"
           >
             <i className="bi bi-zoom-out"></i>
           </button>
@@ -192,6 +253,7 @@ function OutputPreview({ previewUrl, format }) {
             onClick={resetZoom} 
             disabled={isLoading}
             title="Reset Zoom"
+            aria-label="Reset Zoom"
           >
             <i className="bi bi-arrow-counterclockwise"></i>
           </button>
@@ -199,8 +261,9 @@ function OutputPreview({ previewUrl, format }) {
           <button 
             className="control-button"
             onClick={zoomIn} 
-            disabled={scale >= 2.0 || isLoading}
+            disabled={scale >= SCALE.MAX || isLoading}
             title="Zoom In"
+            aria-label="Zoom In"
           >
             <i className="bi bi-zoom-in"></i>
           </button>
@@ -210,6 +273,7 @@ function OutputPreview({ previewUrl, format }) {
             onClick={fitWidth} 
             disabled={isLoading}
             title="Fit to Width"
+            aria-label="Fit to Width"
           >
             <i className="bi bi-arrows-angle-expand"></i>
           </button>

@@ -1,0 +1,323 @@
+/* OutputPreview.css */
+.preview-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    border-radius: 8px;
+    background-color: #fff;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    overflow: hidden;
+    margin-bottom: 20px;
+    border: 1px solid #e9ecef;
+  }
+  
+  .output-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+  }
+  
+  .output-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .output-icon {
+    font-size: 1.35rem;
+  }
+  
+  .output-title h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #343a40;
+  }
+  
+  .output-actions {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .output-viewer {
+    position: relative;
+    height: 450px;
+    max-height: 50vh;
+    padding: 20px;
+    overflow: auto;
+    background-color: #f5f7fa;
+    flex: 1;
+    transition: background-color 0.3s ease;
+  }
+  
+  .preview-content {
+    transform-origin: top left;
+    transition: transform 0.25s ease-out;
+    background-color: white;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border-radius: 4px;
+    min-height: 200px;
+    width: fit-content;
+    max-width: 100%;
+  }
+  
+  .loading-indicator, 
+  .error-message, 
+  .no-preview {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 240px;
+    text-align: center;
+    gap: 16px;
+    padding: 20px;
+  }
+  
+  .loading-text {
+    margin-top: 12px;
+    color: #6c757d;
+    font-size: 15px;
+  }
+  
+  .spinner-border {
+    width: 2.5rem;
+    height: 2.5rem;
+    color: #007bff;
+  }
+  
+  .error-message {
+    color: #dc3545;
+    max-width: 400px;
+  }
+  
+  .error-message i, 
+  .no-preview i {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+  }
+  
+  .error-message h5,
+  .no-preview h5 {
+    font-size: 18px;
+    margin: 0 0 6px;
+  }
+  
+  .error-message p,
+  .no-preview p {
+    margin: 0;
+    color: #6c757d;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  
+  .no-preview {
+    color: #6c757d;
+  }
+  
+  .no-preview i {
+    color: #adb5bd;
+  }
+  
+  .output-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 18px;
+    background-color: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+  }
+  
+  .zoom-info {
+    font-size: 15px;
+    color: #495057;
+    font-weight: 500;
+  }
+  
+  .control-buttons {
+    display: flex;
+    gap: 10px;
+  }
+  
+  .control-button, 
+  .action-button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background-color: #fff;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  
+  .control-button:hover:not(:disabled), 
+  .action-button:hover:not(:disabled) {
+    background-color: #e9ecef;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.12);
+  }
+  
+  .control-button:active:not(:disabled), 
+  .action-button:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+  
+  .control-button:focus,
+  .action-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+  }
+  
+  .control-button:disabled, 
+  .action-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  
+  .print-button {
+    background-color: #e9ecef;
+  }
+  
+  .print-button:hover:not(:disabled) {
+    background-color: #dee2e6;
+  }
+  
+  /* Dark mode support */
+  @media (prefers-color-scheme: dark) {
+    .output-section {
+      background-color: #212529;
+      border-color: #343a40;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    
+    .output-header, .output-controls {
+      background-color: #343a40;
+      border-color: #495057;
+    }
+    
+    .output-title h3 {
+      color: #f8f9fa;
+    }
+    
+    .output-viewer {
+      background-color: #2a2d31;
+    }
+    
+    .preview-content {
+      background-color: #343a40;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    .control-button, .action-button {
+      background-color: #495057;
+      color: #e9ecef;
+      border-color: #6c757d;
+    }
+    
+    .control-button:hover:not(:disabled), 
+    .action-button:hover:not(:disabled) {
+      background-color: #6c757d;
+    }
+    
+    .print-button {
+      background-color: #495057;
+    }
+    
+    .print-button:hover:not(:disabled) {
+      background-color: #5a6268;
+    }
+    
+    .zoom-info {
+      color: #e9ecef;
+    }
+    
+    .no-preview, .loading-text, .error-message p, .no-preview p {
+      color: #adb5bd;
+    }
+  }
+  
+  /* Responsive design improvements */
+  @media (max-width: 768px) {
+    .output-controls {
+      flex-direction: column;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    
+    .control-buttons {
+      width: 100%;
+      justify-content: space-between;
+    }
+    
+    .output-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    
+    .output-actions {
+      align-self: flex-end;
+    }
+    
+    .output-title h3 {
+      font-size: 16px;
+    }
+    
+    .output-viewer {
+      padding: 16px;
+      min-height: 280px;
+    }
+    
+    .preview-content {
+      padding: 16px;
+    }
+  }
+  
+  /* Animation for loading state */
+  @keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+  }
+  
+  .loading-indicator .spinner-border {
+    animation: pulse 1.5s infinite ease-in-out, spinner-border 0.75s linear infinite;
+  }
+  
+  /* Print-specific styles */
+  @media print {
+    .output-section {
+      box-shadow: none;
+      border: none;
+    }
+    
+    .output-header,
+    .output-controls {
+      display: none;
+    }
+    
+    .output-viewer {
+      padding: 0;
+      overflow: visible;
+      background-color: white;
+    }
+    
+    .preview-content {
+      transform: none !important;
+      box-shadow: none;
+      padding: 0;
+      max-width: 100% !important;
+      width: 100% !important;
+    }
+  }
