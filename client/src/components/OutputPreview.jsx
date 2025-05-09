@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import './OutputPreview.css'; // Import the new external CSS file
+import './OutputPreview.css'; // Import the CSS file
 
-// Define format configurations in a separate object for better maintainability
+// Define format configurations
 const FORMAT_CONFIG = {
   docx: { 
     icon: 'bi-file-earmark-word-fill',
@@ -25,7 +25,7 @@ const FORMAT_CONFIG = {
   }
 };
 
-// Scale constants to avoid magic numbers
+// Scale constants
 const SCALE = {
   MIN: 0.5,
   MAX: 2.0,
@@ -36,26 +36,38 @@ const SCALE = {
 function OutputPreview({ previewUrl, format, customStyles = {} }) {
   const [content, setContent] = useState('');
   const [scale, setScale] = useState(SCALE.DEFAULT);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const contentRef = useRef(null);
   const containerRef = useRef(null);
   
-  // Use memoization for format info to avoid recalculation on every render
+  // Get format info
   const formatInfo = useMemo(() => {
     const formatKey = format?.toLowerCase();
     return FORMAT_CONFIG[formatKey] || FORMAT_CONFIG.default;
   }, [format]);
   
-  // Fetch content using a callback to avoid recreating on every render
+  // Fetch preview content with better error handling
   const fetchPreview = useCallback(async (url) => {
-    if (!url) return;
+    if (!url) {
+      setIsLoading(false);
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(url);
+      // Add cache-busting parameter for deployed environments
+      const fetchUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+      
+      const response = await fetch(fetchUrl, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
+      
       if (!response.ok) {
         throw new Error(`Failed to fetch preview (Status: ${response.status})`);
       }
@@ -63,11 +75,13 @@ function OutputPreview({ previewUrl, format, customStyles = {} }) {
       const html = await response.text();
       setContent(html);
       
-      // Schedule fit width after render
-      setTimeout(() => {
-        fitWidth();
+      // Apply fit width after content is loaded
+      requestAnimationFrame(() => {
+        if (containerRef.current && contentRef.current) {
+          fitWidth();
+        }
         setIsLoading(false);
-      }, 100);
+      });
     } catch (error) {
       console.error('Error fetching preview:', error);
       setError(error.message || 'Failed to load preview');
@@ -75,44 +89,55 @@ function OutputPreview({ previewUrl, format, customStyles = {} }) {
     }
   }, []);
   
-  // Effect hook for fetching content
+  // Effect for fetching content
   useEffect(() => {
     fetchPreview(previewUrl);
   }, [previewUrl, fetchPreview]);
   
-  // Zoom controls with guard clauses
+  // Zoom controls
   const zoomIn = () => {
-    if (scale >= SCALE.MAX) return;
-    setScale(prev => Math.min(prev + SCALE.STEP, SCALE.MAX));
+    if (scale < SCALE.MAX) {
+      setScale(prev => Math.min(prev + SCALE.STEP, SCALE.MAX));
+    }
   };
   
   const zoomOut = () => {
-    if (scale <= SCALE.MIN) return;
-    setScale(prev => Math.max(prev - SCALE.STEP, SCALE.MIN));
+    if (scale > SCALE.MIN) {
+      setScale(prev => Math.max(prev - SCALE.STEP, SCALE.MIN));
+    }
   };
   
   const resetZoom = () => setScale(SCALE.DEFAULT);
   
-  // Improved fitWidth with null checks and better scaling logic
+  // Improved fitWidth with better error handling
   const fitWidth = useCallback(() => {
-    if (!contentRef.current || !containerRef.current) return;
-    
-    const container = containerRef.current;
-    const content = contentRef.current;
-    
-    // Ensure content has dimensions before calculating
-    if (content && content.scrollWidth > 0) {
-      const contentWidth = content.scrollWidth;
-      const containerWidth = container.clientWidth - 48; // Account for padding
+    try {
+      if (!contentRef.current || !containerRef.current) return;
       
-      if (containerWidth > 0) {
-        const newScale = containerWidth / contentWidth;
-        setScale(Math.min(Math.max(newScale, SCALE.MIN), SCALE.MAX));
+      const container = containerRef.current;
+      const content = contentRef.current;
+      
+      // Check if elements have dimensions
+      if (content.scrollWidth > 0 && container.clientWidth > 0) {
+        const contentWidth = content.scrollWidth;
+        const containerWidth = container.clientWidth - 40; // Account for padding
+        
+        // Calculate new scale but limit to min/max
+        const newScale = Math.min(
+          Math.max(containerWidth / contentWidth, SCALE.MIN),
+          SCALE.MAX
+        );
+        
+        setScale(newScale);
       }
+    } catch (err) {
+      console.warn('Error in fitWidth:', err);
+      // Fallback to default scale on error
+      setScale(SCALE.DEFAULT);
     }
   }, []);
   
-  // Enhanced print function with error handling
+  // Enhanced print function with better browser compatibility
   const printPreview = useCallback(() => {
     if (!content) return;
     
@@ -124,9 +149,13 @@ function OutputPreview({ previewUrl, format, customStyles = {} }) {
         return;
       }
       
+      // Create a more robust print view
       printWindow.document.write(`
-        <html>
+        <!DOCTYPE html>
+        <html lang="en">
           <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Print ${format?.toUpperCase() || 'Document'}</title>
             <style>
               body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
@@ -143,35 +172,44 @@ function OutputPreview({ previewUrl, format, customStyles = {} }) {
           </head>
           <body>
             ${content}
+            <script>
+              // Auto print after content is loaded
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                  setTimeout(function() { window.close(); }, 100);
+                }, 300);
+              }
+            </script>
           </body>
         </html>
       `);
       
       printWindow.document.close();
-      
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 300);
     } catch (error) {
       console.error('Error printing preview:', error);
       alert('Failed to open print preview. Please check your browser settings.');
     }
   }, [content, format]);
   
-  // Add window resize listener for responsive behavior
+  // Add window resize listener with debounce
   useEffect(() => {
+    let resizeTimer;
+    
     const handleResize = () => {
-      fitWidth();
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(fitWidth, 100);
     };
     
     window.addEventListener('resize', handleResize);
+    
     return () => {
       window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimer);
     };
   }, [fitWidth]);
   
-  // Apply custom styles if provided
+  // Apply custom styles
   const containerStyle = { ...(customStyles.container || {}) };
   
   return (
@@ -209,6 +247,12 @@ function OutputPreview({ previewUrl, format, customStyles = {} }) {
             <i className="bi bi-exclamation-triangle-fill"></i>
             <h5>Error Loading Preview</h5>
             <p>{error}</p>
+            <button 
+              className="retry-button"
+              onClick={() => fetchPreview(previewUrl)}
+            >
+              Retry
+            </button>
           </div>
         )}
         
