@@ -1,20 +1,20 @@
+render.yaml:
+
 services:
   - type: web
-    name: flask-backend
+    name: pdf-convertor-backend
     env: python
-    buildCommand: ""
+    plan: free
+    buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     workingDir: server
-    buildFilter:
-      paths:
-        - server/**
+    envVars:
+      - key: FLASK_ENV
+        value: production
 
   - type: web
-    name: react-frontend
-    env: node
+    name: pdf-convertor-frontend
+    env: static
     buildCommand: npm install && npm run build
-    startCommand: npm run preview
+    staticPublishPath: dist
     workingDir: client
-    buildFilter:
-      paths:
-        - client/**
