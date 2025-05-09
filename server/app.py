@@ -175,12 +175,81 @@ def convert_file():
                     logger.warning(f"{method} extraction failed: {error_msg}")
                     continue
             
-            # If we've tried all methods and still failed
+            # If we've tried all methods and still failed, try to extract text as a fallback
             if 'df' not in locals():
-                logger.error("All table extraction methods failed")
-                return jsonify({
-                    'error': 'PDF table extraction failed. The PDF may not contain extractable tables or may be in an unsupported format.'
-                }), 500
+                logger.warning("All table extraction methods failed, attempting text extraction fallback")
+                try:
+                    # Try to extract text from PDF using pdfplumber or PyMuPDF
+                    try:
+                        import pdfplumber
+                        
+                        logger.info("Extracting text with pdfplumber as fallback")
+                        with pdfplumber.open(upload_path) as pdf:
+                            text_content = []
+                            for i, page in enumerate(pdf.pages):
+                                page_text = page.extract_text() or ""
+                                if page_text.strip():
+                                    text_content.append([f"Page {i+1}", page_text.strip()])
+                            
+                            if text_content:
+                                # Create a DataFrame with the extracted text
+                                df = pd.DataFrame(text_content, columns=["Page", "Content"])
+                                logger.info("Created text-based table as fallback")
+                            else:
+                                # If no text was extracted, try PyMuPDF as a second fallback
+                                raise ValueError("No text extracted with pdfplumber")
+                    except Exception as pdfplumber_error:
+                        # Try PyMuPDF as a fallback
+                        logger.info(f"Pdfplumber failed: {str(pdfplumber_error)}. Trying PyMuPDF...")
+                        try:
+                            import fitz  # PyMuPDF
+                            
+                            text_content = []
+                            doc = fitz.open(upload_path)
+                            for i in range(len(doc)):
+                                page = doc[i]
+                                page_text = page.get_text()
+                                if page_text.strip():
+                                    text_content.append([f"Page {i+1}", page_text.strip()])
+                            
+                            if text_content:
+                                # Create a DataFrame with the extracted text
+                                df = pd.DataFrame(text_content, columns=["Page", "Content"])
+                                logger.info("Created text-based table using PyMuPDF fallback")
+                            else:
+                                # If no text was extracted, create an empty DataFrame with a message
+                                df = pd.DataFrame([["No extractable content found in this PDF"]], 
+                                                columns=["Message"])
+                                logger.warning("No text content found in PDF with PyMuPDF either")
+                        except Exception as pymupdf_error:
+                            logger.error(f"PyMuPDF fallback also failed: {str(pymupdf_error)}")
+                            # Create a simple DataFrame with a message
+                            df = pd.DataFrame([["This PDF does not contain extractable text or tables"]], 
+                                            columns=["Message"])
+                            logger.warning("Created empty DataFrame as last resort")
+                    
+                    # Save the fallback content
+                    if format_type == 'csv':
+                        df.to_csv(output_path, index=False)
+                    else:  # xlsx
+                        df.to_excel(output_path, index=False)
+                        
+                except Exception as e:
+                    # If even the text extraction fallback fails, return an error
+                    logger.error(f"Text extraction fallback also failed: {str(e)}")
+                    
+                    # Check for common error conditions
+                    error_message = 'PDF extraction failed.'
+                    if 'password' in str(e).lower() or 'decrypt' in str(e).lower():
+                        error_message += ' The PDF appears to be password-protected.'
+                    elif 'corrupt' in str(e).lower() or 'invalid' in str(e).lower():
+                        error_message += ' The PDF file may be corrupted.'
+                    else:
+                        error_message += ' The PDF may be in an unsupported format or have restricted permissions.'
+                    
+                    return jsonify({
+                        'error': error_message
+                    }), 500
         
         # Generate response
         host_url = request.host_url.rstrip('/')

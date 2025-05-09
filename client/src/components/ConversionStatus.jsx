@@ -21,6 +21,19 @@ function ConversionStatus({ result, error, isConverting }) {
   }
   
   if (error) {
+    // Determine if we should show specific help text based on the error message
+    let helpText = "Please try again or choose a different format.";
+    
+    if (error.includes("table extraction failed") || error.includes("Could not extract tables")) {
+      helpText = "This PDF doesn't contain extractable tables. Try converting to DOCX format instead.";
+    } else if (error.includes("too large")) {
+      helpText = "Try splitting your PDF into smaller files before uploading.";
+    } else if (error.includes("timed out")) {
+      helpText = "Try a smaller or less complex PDF file.";
+    } else if (error.includes("encrypted") || error.includes("corrupted")) {
+      helpText = "Make sure your PDF is not password-protected or damaged.";
+    }
+    
     return (
       <div className="conversion-status">
         <div className="status-indicator error">
@@ -29,7 +42,7 @@ function ConversionStatus({ result, error, isConverting }) {
         <div className="status-content">
           <h4 className="status-title">Conversion Failed</h4>
           <p className="status-message">{error}</p>
-          <p className="status-help">Please try again or choose a different format.</p>
+          <p className="status-help">{helpText}</p>
         </div>
       </div>
     );

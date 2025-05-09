@@ -36,20 +36,48 @@ function App() {
     formData.append('format', selectedFormat);
     
     try {
+      // Add a timeout to handle long-running conversions
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      
       const response = await fetch('https://pdf-convertor-4jah.onrender.com/convert', {
         method: 'POST',
         body: formData,
+        signal: controller.signal
       });
       
-      const result = await response.json();
+      clearTimeout(timeoutId);
+      
+      // Try to parse the response as JSON
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        throw new Error('Server returned an invalid response. Please try again.');
+      }
       
       if (!response.ok) {
-        throw new Error(result.error || 'Conversion failed');
+        // Handle specific error cases
+        if (response.status === 500) {
+          if (result.error && result.error.includes('table extraction failed')) {
+            throw new Error('Could not extract tables from this PDF. Try a different format or file.');
+          } else {
+            throw new Error(result.error || 'Server error occurred. Please try again later.');
+          }
+        } else if (response.status === 413) {
+          throw new Error('File is too large. Maximum size is 16MB.');
+        } else {
+          throw new Error(result.error || 'Conversion failed. Please try again.');
+        }
       }
       
       setConversionResult(result);
     } catch (err) {
-      setError(err.message);
+      if (err.name === 'AbortError') {
+        setError('Conversion timed out. The file may be too large or complex.');
+      } else {
+        setError(err.message);
+      }
     } finally {
       setIsConverting(false);
     }
