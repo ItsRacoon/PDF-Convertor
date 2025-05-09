@@ -1,14 +1,44 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask import Flask, request, jsonify, send_from_directory
 import os
 import uuid
 import logging
+import sys
 from werkzeug.utils import secure_filename
 from pdf2docx import Converter
-import camelot
 import pandas as pd
 from docx import Document
 from flask_cors import CORS
 from pathlib import Path
+
+# Try to import camelot, but don't fail if it's not available
+try:
+    import camelot
+    CAMELOT_AVAILABLE = True
+except ImportError:
+    CAMELOT_AVAILABLE = False
+    logging.warning("Camelot not available. Will use tabula-py for table extraction.")
+
+# Load environment variables from .env file if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
+
+# Check if running on Render.com
+IS_RENDER = os.environ.get('RENDER_ENV') == 'production'
+USE_TABULA_FALLBACK = os.environ.get('TABULA_FALLBACK', 'false').lower() == 'true'
+
+logger.info(f"Running in {'Render.com' if IS_RENDER else 'local'} environment")
+logger.info(f"Tabula fallback enabled: {USE_TABULA_FALLBACK}")
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -17,6 +47,7 @@ CORS(app)
 app.config.update(
     UPLOAD_FOLDER=os.path.join(os.getcwd(), 'uploads'),
     CONVERTED_FOLDER=os.path.join(os.getcwd(), 'converted'),
+    DEBUG=os.environ.get('FLASK_ENV') == 'development',
     MAX_CONTENT_LENGTH=16 * 1024 * 1024,
     ALLOWED_EXTENSIONS={'pdf'},
     CONVERSION_FORMATS={'docx', 'csv', 'xlsx'}
@@ -36,8 +67,18 @@ def allowed_file(filename):
 
 @app.route('/')
 def home():
-    """Serve the main application page"""
-    return render_template('index.html')
+    """API root endpoint"""
+    return jsonify({
+        'name': 'PDF Convertor API',
+        'version': '1.0.0',
+        'description': 'API for converting PDF files to various formats',
+        'endpoints': {
+            '/convert': 'POST - Convert PDF to selected format',
+            '/download/<filename>': 'GET - Download converted file',
+            '/preview_output/<filename>': 'GET - Preview converted file',
+            '/health': 'GET - API health check'
+        }
+    })
 
 @app.route('/convert', methods=['POST'])
 def convert_file():
@@ -75,59 +116,71 @@ def convert_file():
                       })
             cv.close()
         else:  # csv or xlsx
-            try:
-                # Try using camelot first (requires Ghostscript)
-                tables = camelot.read_pdf(upload_path, pages='all')
-                if tables.n == 0:
-                    return jsonify({'error': 'No tables found in PDF'}), 400
-                    
-                df = pd.concat([table.df for table in tables]) if tables.n > 1 else tables[0].df
+            # Determine which extraction method to try first
+            if IS_RENDER or not CAMELOT_AVAILABLE or USE_TABULA_FALLBACK:
+                # On Render, or if camelot is not available, try tabula-py first
+                extraction_methods = ['tabula', 'camelot'] if CAMELOT_AVAILABLE else ['tabula']
+            else:
+                # Locally, try camelot first (if Ghostscript is installed)
+                extraction_methods = ['camelot', 'tabula']
                 
-                if format_type == 'csv':
-                    df.to_csv(output_path, index=False)
-                else:  # xlsx
-                    df.to_excel(output_path, index=False)
+            logger.info(f"Using extraction methods in order: {extraction_methods}")
+            
+            last_error = None
+            for method in extraction_methods:
+                try:
+                    if method == 'camelot' and CAMELOT_AVAILABLE:
+                        # Try using camelot (requires Ghostscript)
+                        logger.info("Attempting table extraction with camelot...")
+                        tables = camelot.read_pdf(upload_path, pages='all')
+                        if tables.n == 0:
+                            logger.warning("No tables found with camelot")
+                            continue
+                            
+                        df = pd.concat([table.df for table in tables]) if tables.n > 1 else tables[0].df
                     
-            except Exception as e:
-                error_msg = str(e)
-                logger.warning(f"Camelot extraction failed: {error_msg}")
-                
-                # If Ghostscript is missing, try alternative method using tabula-py
-                if "Ghostscript is not installed" in error_msg:
-                    try:
-                        # Check if tabula-py is installed
+                    elif method == 'tabula':
+                        # Try using tabula-py
+                        logger.info("Attempting table extraction with tabula-py...")
                         import importlib
                         tabula_spec = importlib.util.find_spec('tabula')
                         
                         if tabula_spec is None:
                             # Install tabula-py if not available
                             import subprocess
-                            logger.info("Installing tabula-py as an alternative to camelot...")
+                            logger.info("Installing tabula-py...")
                             subprocess.check_call(['pip', 'install', 'tabula-py'])
-                            
-                        import tabula
                         
-                        # Extract tables using tabula
+                        import tabula
                         dfs = tabula.read_pdf(upload_path, pages='all')
                         if not dfs:
-                            return jsonify({'error': 'No tables found in PDF'}), 400
+                            logger.warning("No tables found with tabula-py")
+                            continue
                             
                         df = pd.concat(dfs) if len(dfs) > 1 else dfs[0]
-                        
-                        if format_type == 'csv':
-                            df.to_csv(output_path, index=False)
-                        else:  # xlsx
-                            df.to_excel(output_path, index=False)
-                            
-                    except Exception as tabula_error:
-                        logger.error(f"Alternative extraction failed: {str(tabula_error)}")
-                        return jsonify({
-                            'error': 'PDF table extraction failed. Please install Ghostscript or try a different format. '
-                                    'See: https://camelot-py.readthedocs.io/en/latest/user/install-deps.html'
-                        }), 500
-                else:
-                    # Re-raise if it's not a Ghostscript issue
-                    raise
+                    
+                    # If we got here, extraction was successful
+                    if format_type == 'csv':
+                        df.to_csv(output_path, index=False)
+                    else:  # xlsx
+                        df.to_excel(output_path, index=False)
+                    
+                    # Successfully extracted and saved
+                    logger.info(f"Successfully extracted tables using {method}")
+                    break
+                    
+                except Exception as e:
+                    last_error = e
+                    error_msg = str(e)
+                    logger.warning(f"{method} extraction failed: {error_msg}")
+                    continue
+            
+            # If we've tried all methods and still failed
+            if 'df' not in locals():
+                logger.error("All table extraction methods failed")
+                return jsonify({
+                    'error': 'PDF table extraction failed. The PDF may not contain extractable tables or may be in an unsupported format.'
+                }), 500
         
         # Generate response
         host_url = request.host_url.rstrip('/')

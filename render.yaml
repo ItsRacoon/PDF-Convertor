@@ -3,14 +3,12 @@ services:
     name: pdf-convertor-backend
     env: python
     plan: free
-    buildCommand: ./build.sh && pip install -r requirements.txt
+    buildCommand: ./build.sh
     startCommand: gunicorn app:app
     workingDir: server
     envVars:
       - key: FLASK_ENV
         value: production
-
-
 
   - type: web
     name: pdf-convertor-frontend
