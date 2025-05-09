@@ -1,0 +1,13 @@
+OrderDate,Region,Rep,Item,Units,"UnitCost",Total
+01-06-2024,East,Jones,Pencil,95,1.99,189.05
+1/23/2024,Central,Kivell,Binder,50,19.99,999.5
+02-09-2024,Central,Jardine,Pencil,36,4.99,179.64
+2/26/2024,Central,Gill,Pen,27,19.99,539.73
+3/15/2024,West,Sorvino,Pencil,56,2.99,167.44
+04-01-2024,East,Jones,Binder,60,4.99,299.4
+4/18/2024,Central,"Andrews",Pencil,75,1.99,149.25
+05-05-2024,Central,Jardine,Pencil,90,4.99,449.1
+5/22/2024,West,"Thompson",Pencil,32,1.99,63.68
+06-08-2024,East,Jones,Binder,60,8.99,539.4
+6/25/2024,Central,Morgan,Pencil,90,4.99,449.1
+07-12-2024,East,Howard,Binder,29,1.99,57.71

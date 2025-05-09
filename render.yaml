@@ -1,5 +1,3 @@
-render.yaml:
-
 services:
   - type: web
     name: pdf-convertor-backend
@@ -11,6 +9,8 @@ services:
     envVars:
       - key: FLASK_ENV
         value: production
+      - key: PORT
+        value: 10000  # Optional: Flask defaults to this via Render
 
   - type: web
     name: pdf-convertor-frontend

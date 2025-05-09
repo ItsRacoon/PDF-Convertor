@@ -14,7 +14,6 @@ from pathlib import Path
 app = Flask(__name__)
 CORS(app)
 
-# Configuration
 app.config.update(
     UPLOAD_FOLDER=os.path.join(os.getcwd(), 'uploads'),
     CONVERTED_FOLDER=os.path.join(os.getcwd(), 'converted'),
@@ -76,16 +75,59 @@ def convert_file():
                       })
             cv.close()
         else:  # csv or xlsx
-            tables = camelot.read_pdf(upload_path, pages='all')
-            if tables.n == 0:
-                return jsonify({'error': 'No tables found in PDF'}), 400
+            try:
+                # Try using camelot first (requires Ghostscript)
+                tables = camelot.read_pdf(upload_path, pages='all')
+                if tables.n == 0:
+                    return jsonify({'error': 'No tables found in PDF'}), 400
+                    
+                df = pd.concat([table.df for table in tables]) if tables.n > 1 else tables[0].df
                 
-            df = pd.concat([table.df for table in tables]) if tables.n > 1 else tables[0].df
-            
-            if format_type == 'csv':
-                df.to_csv(output_path, index=False)
-            else:  # xlsx
-                df.to_excel(output_path, index=False)
+                if format_type == 'csv':
+                    df.to_csv(output_path, index=False)
+                else:  # xlsx
+                    df.to_excel(output_path, index=False)
+                    
+            except Exception as e:
+                error_msg = str(e)
+                logger.warning(f"Camelot extraction failed: {error_msg}")
+                
+                # If Ghostscript is missing, try alternative method using tabula-py
+                if "Ghostscript is not installed" in error_msg:
+                    try:
+                        # Check if tabula-py is installed
+                        import importlib
+                        tabula_spec = importlib.util.find_spec('tabula')
+                        
+                        if tabula_spec is None:
+                            # Install tabula-py if not available
+                            import subprocess
+                            logger.info("Installing tabula-py as an alternative to camelot...")
+                            subprocess.check_call(['pip', 'install', 'tabula-py'])
+                            
+                        import tabula
+                        
+                        # Extract tables using tabula
+                        dfs = tabula.read_pdf(upload_path, pages='all')
+                        if not dfs:
+                            return jsonify({'error': 'No tables found in PDF'}), 400
+                            
+                        df = pd.concat(dfs) if len(dfs) > 1 else dfs[0]
+                        
+                        if format_type == 'csv':
+                            df.to_csv(output_path, index=False)
+                        else:  # xlsx
+                            df.to_excel(output_path, index=False)
+                            
+                    except Exception as tabula_error:
+                        logger.error(f"Alternative extraction failed: {str(tabula_error)}")
+                        return jsonify({
+                            'error': 'PDF table extraction failed. Please install Ghostscript or try a different format. '
+                                    'See: https://camelot-py.readthedocs.io/en/latest/user/install-deps.html'
+                        }), 500
+                else:
+                    # Re-raise if it's not a Ghostscript issue
+                    raise
         
         # Generate response
         host_url = request.host_url.rstrip('/')
