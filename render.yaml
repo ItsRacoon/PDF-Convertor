@@ -3,14 +3,14 @@ services:
     name: pdf-convertor-backend
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: ./build.sh && pip install -r requirements.txt
     startCommand: gunicorn app:app
     workingDir: server
     envVars:
       - key: FLASK_ENV
         value: production
-      - key: PORT
-        value: 10000  # Optional: Flask defaults to this via Render
+
+
 
   - type: web
     name: pdf-convertor-frontend
